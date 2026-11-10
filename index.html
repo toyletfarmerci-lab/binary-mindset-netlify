@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090b10">
+<title>BINARY MINDSET — OTC Signal Desk</title>
+<style>
+:root{color-scheme:dark;--bg:#090b10;--panel:#141923;--panel2:#10151d;--line:#283241;--muted:#9ba8ba;--red:#ff465d;--green:#18d69a;--gold:#ffb347}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#35202a 0,#090b10 55%);color:#f5f7fb;font:15px/1.5 Inter,system-ui,Segoe UI,Arial,sans-serif}
+.wrap{max-width:980px;margin:auto;padding:22px 16px 48px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}.brand{font-weight:900;letter-spacing:2px;font-size:20px}.brand span{color:var(--red)}.tag{color:var(--muted);font-size:12px}
+.panel{background:linear-gradient(145deg,#171e29,#111720);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 16px 45px #0005;margin-bottom:15px}
+.hero{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.eyebrow{font-size:11px;letter-spacing:2px;color:var(--muted);font-weight:800}.signal{font-size:clamp(30px,8vw,48px);font-weight:950;letter-spacing:1px;margin:4px 0}.signal.call{color:var(--green)}.signal.put{color:var(--red)}.signal.wait{color:var(--gold)}
+.status{border:1px solid var(--line);border-radius:999px;padding:7px 11px;font-size:12px;color:var(--muted)}.status.ok{color:var(--green);border-color:#17634e}.status.err{color:var(--red);border-color:#79313d}
+.controls{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:end;margin-top:16px}label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}select,button{height:44px;border-radius:11px;border:1px solid var(--line);background:#0c1118;color:#fff;padding:0 13px;font:inherit}select{width:100%}button{cursor:pointer;font-weight:800;background:linear-gradient(120deg,#ff4d61,#d92443);border:0;padding:0 18px}button:disabled{opacity:.5;cursor:wait}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.metric{background:#0d131b;border:1px solid var(--line);border-radius:13px;padding:14px}.metric small{display:block;color:var(--muted);font-size:11px;letter-spacing:1px}.metric strong{display:block;font-size:21px;margin-top:5px}
+h2{font-size:14px;letter-spacing:1px;margin:0 0 12px}.message{color:var(--muted);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}.candles{display:grid;gap:7px}.candle{display:flex;justify-content:space-between;gap:10px;background:#0d131b;border:1px solid #222d3a;padding:9px 11px;border-radius:9px;font-size:12px}.up{color:var(--green)}.down{color:var(--red)}.foot{text-align:center;color:#768397;font-size:11px;margin-top:20px}
+@media(max-width:600px){.controls{grid-template-columns:1fr 1fr}.controls .pair{grid-column:1/-1}.grid{grid-template-columns:1fr 1fr}.grid .metric:last-child{grid-column:1/-1}.top{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><div><div class="brand">BINARY <span>MINDSET</span></div><div class="tag">OTC SIGNAL DESK · 1 MINUTE</div></div><div class="status" id="status">NOT CONNECTED</div></header>
+  <section class="panel">
+    <div class="hero"><div><div class="eyebrow">CURRENT SIGNAL</div><div class="signal wait" id="signal">WAIT</div><div class="message" id="reason">Connect to your authorized Quotex OTC candle feed to begin.</div></div><div class="status" id="updated">No candle data yet</div></div>
+    <div class="controls">
+      <div class="pair"><label for="symbol">OTC PAIR</label><select id="symbol"><option value="EURUSD_otc">EUR/USD OTC</option><option value="GBPUSD_otc">GBP/USD OTC</option><option value="USDJPY_otc">USD/JPY OTC</option><option value="AUDUSD_otc">AUD/USD OTC</option><option value="EURGBP_otc">EUR/GBP OTC</option><option value="USDCHF_otc">USD/CHF OTC</option></select></div>
+      <div><label>TIMEFRAME</label><select disabled><option>1 minute</option></select></div>
+      <button id="refresh">REFRESH</button>
+    </div>
+  </section>
+  <section class="grid">
+    <div class="metric"><small>RSI (14)</small><strong id="rsi">—</strong></div>
+    <div class="metric"><small>EMA (9 / 21)</small><strong id="ema">—</strong></div>
+    <div class="metric"><small>CANDLES RECEIVED</small><strong id="count">0</strong></div>
+  </section>
+  <section class="panel"><h2>RECENT CANDLES</h2><div class="candles" id="candles"><div class="message">Waiting for candle data…</div></div></section>
+  <section class="panel"><h2>CONNECTION DETAILS</h2><div class="message" id="details">The API key is kept on Netlify's server-side environment. It is not stored in this page.</div></section>
+  <div class="foot">Signals are technical indicators, not financial advice. OTC prices and signal outcomes are not guaranteed. Signal-only dashboard — no trades are placed.</div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let busy = false;
+function ema(values, period){const k=2/(period+1);let v=values[0];for(let i=1;i<values.length;i++)v=values[i]*k+v*(1-k);return v}
+function rsi(values, period=14){if(values.length<=period)return null;let gain=0,loss=0;for(let i=values.length-period;i<values.length;i++){const d=values[i]-values[i-1];if(d>0)gain+=d;else loss-=d}if(loss===0)return 100;const rs=(gain/period)/(loss/period);return 100-(100/(1+rs))}
+function showError(msg){$('status').textContent='CONNECTION ERROR';$('status').className='status err';$('signal').textContent='WAIT';$('signal').className='signal wait';$('reason').textContent=msg;$('details').textContent=msg}
+async function loadCandles(){
+ if(busy)return;busy=true;$('refresh').disabled=true;$('status').textContent='CONNECTING…';$('status').className='status';
+ const symbol=$('symbol').value;
+ try{
+  const res=await fetch(`/.netlify/functions/candles?symbol=${encodeURIComponent(symbol)}&limit=50`,{cache:'no-store'});
+  const data=await res.json().catch(()=>({error:'The server returned a non-JSON response.'}));
+  if(!res.ok)throw new Error(data.error||`Request failed (${res.status})`);
+  if(!Array.isArray(data.candles)||!data.candles.length)throw new Error('The API returned no candles for this symbol.');
+  const rows=data.candles;const closes=rows.map(x=>Number(x.close)).filter(Number.isFinite);
+  $('count').textContent=String(closes.length);
+  $('candles').innerHTML=rows.slice(-8).reverse().map(c=>{const up=Number(c.close)>=Number(c.open);return `<div class="candle"><span>${new Date(Number(c.time)*1000).toLocaleTimeString()}</span><span class="${up?'up':'down'}">${up?'▲':'▼'} ${Number(c.close).toFixed(5)}</span></div>`}).join('');
+  if(closes.length<22){$('signal').textContent='WAIT';$('signal').className='signal wait';$('reason').textContent=`Received ${closes.length} candles. At least 22 valid closes are needed for EMA 21 and RSI 14.`;$('rsi').textContent='—';$('ema').textContent='—'}
+  else{
+   const rv=rsi(closes);const e9=ema(closes.slice(-60),9);const e21=ema(closes.slice(-60),21);
+   $('rsi').textContent=rv.toFixed(1);$('ema').textContent=`${e9.toFixed(5)} / ${e21.toFixed(5)}`;
+   let sig='WAIT',why='Indicators do not agree; wait for a clearer setup.';
+   if(e9>e21&&rv>=50&&rv<70){sig='CALL';why='EMA 9 is above EMA 21 and RSI confirms upward momentum.'}
+   else if(e9<e21&&rv<=50&&rv>30){sig='PUT';why='EMA 9 is below EMA 21 and RSI confirms downward momentum.'}
+   $('signal').textContent=sig;$('signal').className='signal '+sig.toLowerCase();$('reason').textContent=why;
+  }
+  $('status').textContent='CONNECTED';$('status').className='status ok';$('updated').textContent='Updated '+new Date().toLocaleTimeString();$('details').textContent=`Source: OTCharts · venue: Quotex · symbol: ${symbol} · timeframe: 60 seconds · ${closes.length} closes received.`;
+ }catch(e){showError(e.message||'Unknown connection error.')}
+ finally{busy=false;$('refresh').disabled=false}
+}
+$('refresh').addEventListener('click',loadCandles);$('symbol').addEventListener('change',loadCandles);
+loadCandles();setInterval(loadCandles,60000);
+</script>
+</body>
+</html>
